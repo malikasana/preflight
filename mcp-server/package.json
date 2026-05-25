@@ -1,9 +1,32 @@
 {
-  "name": "preflight-mcp",
-  "version": "1.0.0",
+  "name": "@malikasana/preflight-mcp",
+  "version": "1.1.0",
+  "description": "MCP server that gives Claude Code accurate knowledge of your machine environment and live npm package versions",
   "type": "module",
+  "bin": {
+    "preflight-mcp": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "package.json"
+  ],
   "scripts": {
     "start": "node index.js"
+  },
+  "keywords": [
+    "mcp",
+    "claude",
+    "claude-code",
+    "environment",
+    "preflight",
+    "npm-registry"
+  ],
+  "author": "malikasana",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/malikasana/preflight.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
