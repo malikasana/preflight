@@ -132,3 +132,4 @@ preflight/
 | Tool | Description |
 |------|-------------|
 | `get_environment` | Returns the full JSON contents of `~/.preflight/env-config.json` |
+| `get_package_config` | Fetches latest version and CDN URLs for npm packages from live registry with 1 hour cache and static fallback |

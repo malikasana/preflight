@@ -91,8 +91,47 @@ Re-run the detect script whenever you install new tools, update runtimes, or cha
 | Tool | Description |
 |------|-------------|
 | `get_environment` | Returns the full JSON contents of `~/.preflight/env-config.json` |
+| `get_package_config` | Fetches latest version and CDN URLs for npm packages from live registry with 1 hour cache and static fallback |
 
----
+## Usage example
 
-> **Phase 3 — Live package registry** *(coming soon)*
-> The next version will query live package registries (npm, PyPI, pub.dev) on demand rather than relying on a static snapshot. Custom `extensions` entries will be preserved as a first-class concept across runs.
+**Prompt:** Use `get_package_config` with `["three", "gsap", "lenis"]`
+
+**Returns:**
+
+```json
+[
+  {
+    "package": "three",
+    "version": "0.184.0",
+    "install": "npm install three",
+    "cdn": {
+      "jsdelivr_esm": "https://cdn.jsdelivr.net/npm/three@0.184.0/+esm",
+      "jsdelivr_bundle": "https://cdn.jsdelivr.net/npm/three@0.184.0/bundled/three.min.js",
+      "unpkg": "https://unpkg.com/three@0.184.0"
+    }
+  },
+  {
+    "package": "gsap",
+    "version": "3.15.0",
+    "install": "npm install gsap",
+    "cdn": {
+      "jsdelivr_esm": "https://cdn.jsdelivr.net/npm/gsap@3.15.0/+esm",
+      "jsdelivr_bundle": "https://cdn.jsdelivr.net/npm/gsap@3.15.0/bundled/gsap.min.js",
+      "unpkg": "https://unpkg.com/gsap@3.15.0"
+    }
+  },
+  {
+    "package": "lenis",
+    "version": "1.3.23",
+    "install": "npm install lenis",
+    "cdn": {
+      "jsdelivr_esm": "https://cdn.jsdelivr.net/npm/lenis@1.3.23/+esm",
+      "jsdelivr_bundle": "https://cdn.jsdelivr.net/npm/lenis@1.3.23/bundled/lenis.min.js",
+      "unpkg": "https://unpkg.com/lenis@1.3.23"
+    }
+  }
+]
+```
+
+Each entry includes the exact pinned version, the `npm install` command, and three CDN URL variants (ESM, bundled/minified, unpkg). Results are cached for 1 hour; a static fallback is used if the registry is unreachable.
