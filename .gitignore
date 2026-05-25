@@ -1,0 +1,7 @@
+# Generated snapshot — contains personal machine data, never commit
+env-config.json
+
+# Keep source scripts and documentation
+!detect.ps1
+!detect.sh
+!CLAUDE.md
