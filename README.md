@@ -172,5 +172,24 @@ preflight/
 | Tool | Description |
 |------|-------------|
 | `get_environment` | Returns the full JSON contents of `~/.preflight/env-config.json` |
-| `get_package_config` | Fetches latest version and CDN URLs for npm packages from live registry with 1 hour cache and static fallback |
+| `get_package_config` | Fetches latest version and install info for **npm** (default), **PyPI**, and **pub.dev** packages from live registries with 1 hour cache and static fallback. Pass `registry: "pypi"` or `registry: "pubdev"` to query Python or Dart/Flutter packages. |
 | `generate_claude_md` | Generates a `CLAUDE.md` file in the current working directory with shell rules, package manager, CDN preference, versions, Flutter/Android setup, and Windows gotchas — all derived from your env-config.json |
+
+### get_package_config registry examples
+
+By default `get_package_config` queries npm. Use the `registry` parameter to target other ecosystems:
+
+```
+# npm (default)
+Use get_package_config with ["three", "gsap"]
+
+# PyPI — Python packages
+Use get_package_config with ["requests", "fastapi"] and registry "pypi"
+
+# pub.dev — Dart / Flutter packages
+Use get_package_config with ["dio", "riverpod"] and registry "pubdev"
+```
+
+- **npm** results include CDN URLs (jsdelivr, unpkg) and the `npm install` command.
+- **PyPI** results include the `pip install` command.
+- **pub.dev** results include the pubspec.yaml dependency line (e.g. `dio: ^5.9.2`) ready to paste under `dependencies:`.

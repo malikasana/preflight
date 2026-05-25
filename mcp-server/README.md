@@ -136,7 +136,7 @@ Re-run the detect script whenever you install new tools, update runtimes, or cha
 | Tool | Description |
 |------|-------------|
 | `get_environment` | Returns the full JSON contents of `~/.preflight/env-config.json` |
-| `get_package_config` | Fetches latest version and CDN URLs for npm packages from live registry with 1 hour cache and static fallback |
+| `get_package_config` | Fetches latest version and install info for **npm** (default), **PyPI**, and **pub.dev** packages from live registries with 1 hour cache and static fallback. Pass `registry: "pypi"` or `registry: "pubdev"` to query Python or Dart/Flutter packages. |
 | `generate_claude_md` | Generates a `CLAUDE.md` file in the current working directory with shell rules, package manager, CDN preference, versions, Flutter/Android setup, and Windows gotchas — all derived from your env-config.json |
 
 ---
@@ -171,6 +171,56 @@ Claude reads `~/.preflight/env-config.json` and knows your OS, Node version, Pyt
 ```
 
 Each entry includes the exact pinned version, the `npm install` command, and CDN URL variants. Results are cached for 1 hour; a static fallback is used if the registry is unreachable.
+
+**PyPI (Python packages):**
+
+**Prompt:** Use `get_package_config` with `["requests", "fastapi"]` and `registry: "pypi"`
+
+**Returns:**
+
+```json
+[
+  {
+    "package": "requests",
+    "version": "2.34.2",
+    "install": "pip install requests",
+    "registry": "pypi"
+  },
+  {
+    "package": "fastapi",
+    "version": "0.115.12",
+    "install": "pip install fastapi",
+    "registry": "pypi"
+  }
+]
+```
+
+**pub.dev (Dart / Flutter packages):**
+
+**Prompt:** Use `get_package_config` with `["dio", "riverpod"]` and `registry: "pubdev"`
+
+**Returns:**
+
+```json
+[
+  {
+    "package": "dio",
+    "version": "5.9.2",
+    "install": "dio: ^5.9.2",
+    "registry": "pubdev",
+    "pubspec": true
+  },
+  {
+    "package": "riverpod",
+    "version": "3.2.1",
+    "install": "riverpod: ^3.2.1",
+    "registry": "pubdev",
+    "pubspec": true
+  }
+]
+```
+
+pub.dev results use pubspec.yaml syntax for the `install` field. Add them directly under `dependencies:` in your `pubspec.yaml`, then run `flutter pub get`.
 
 ### generate_claude_md
 
