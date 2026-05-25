@@ -5,3 +5,4 @@ env-config.json
 !detect.ps1
 !detect.sh
 !CLAUDE.md
+mcp-server/node_modules/
