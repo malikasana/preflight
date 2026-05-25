@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const server = new McpServer({
   name: "preflight-mcp",
-  version: "1.1.0",
+  version: "1.2.0",
 });
 
 // ─── get_environment ──────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ server.tool(
 
 // ─── get_package_config ───────────────────────────────────────────────────────
 
-const FALLBACK = {
+const FALLBACK_NPM = {
   "three":                     { version: "0.177.0" },
   "gsap":                      { version: "3.12.5" },
   "@gsap/ScrollTrigger":       { version: "3.12.5" },
@@ -92,6 +92,38 @@ const FALLBACK = {
   "prisma":                    { version: "5.16.0", noCdn: true },
 };
 
+const FALLBACK_PYPI = {
+  "requests":  { version: "2.32.3" },
+  "django":    { version: "5.0.6" },
+  "flask":     { version: "3.0.3" },
+  "fastapi":   { version: "0.111.0" },
+  "numpy":     { version: "2.0.0" },
+  "pandas":    { version: "2.2.2" },
+  "pillow":    { version: "10.4.0" },
+  "pytest":    { version: "8.2.2" },
+  "pydantic":  { version: "2.7.4" },
+  "openai":    { version: "1.35.3" },
+  "anthropic": { version: "0.28.0" },
+  // no fallback for smartgate-ai and gemini-flux — live only
+};
+
+const FALLBACK_PUBDEV = {
+  "dio":                  { version: "5.4.3" },
+  "provider":             { version: "6.1.2" },
+  "riverpod":             { version: "2.5.1" },
+  "flutter_bloc":         { version: "8.1.5" },
+  "go_router":            { version: "14.1.4" },
+  "get":                  { version: "4.6.6" },
+  "hive":                 { version: "2.2.3" },
+  "supabase_flutter":     { version: "2.5.2" },
+  "shared_preferences":   { version: "2.2.3" },
+  "http":                 { version: "1.2.1" },
+  "cached_network_image": { version: "3.3.1" },
+  "flutter_svg":          { version: "2.0.10" },
+  "freezed":              { version: "2.5.2" },
+  "json_serializable":    { version: "6.8.0" },
+};
+
 const CACHE_TTL = 60 * 60 * 1000;
 const pkgCache  = new Map();
 
@@ -103,16 +135,13 @@ function buildCdnUrls(pkg, version) {
   };
 }
 
-async function fetchLiveVersion(pkg) {
+async function fetchWithTimeout(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
-      signal: controller.signal,
-    });
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
-    const data = await res.json();
-    return data.version ?? null;
+    return await res.json();
   } catch {
     return null;
   } finally {
@@ -120,24 +149,60 @@ async function fetchLiveVersion(pkg) {
   }
 }
 
-function buildResult(pkg, version, source, cached, cachedAt, noCdn) {
-  const result = { package: pkg, version, source, cached, cachedAt, install: `npm install ${pkg}` };
+async function fetchLiveVersionNpm(pkg) {
+  const data = await fetchWithTimeout(`https://registry.npmjs.org/${pkg}/latest`);
+  return data?.version ?? null;
+}
+
+async function fetchLiveVersionPypi(pkg) {
+  const data = await fetchWithTimeout(`https://pypi.org/pypi/${pkg}/json`);
+  return data?.info?.version ?? null;
+}
+
+async function fetchLiveVersionPubdev(pkg) {
+  const data = await fetchWithTimeout(`https://pub.dev/api/packages/${pkg}`);
+  return data?.latest?.version ?? null;
+}
+
+function buildNpmResult(pkg, version, source, cached, cachedAt, noCdn) {
+  const result = { package: pkg, version, source, cached, cachedAt, install: `npm install ${pkg}`, registry: "npm" };
   if (!noCdn) result.cdn = buildCdnUrls(pkg, version);
   return result;
 }
 
+function buildPypiResult(pkg, version, source, cached, cachedAt) {
+  return { package: pkg, version, source, cached, cachedAt, install: `pip install ${pkg}`, registry: "pypi" };
+}
+
+function buildPubdevResult(pkg, version, source, cached, cachedAt) {
+  return {
+    package: pkg,
+    version,
+    source,
+    cached,
+    cachedAt,
+    install: `${pkg}: ^${version}`,
+    registry: "pubdev",
+    pubspec: true,
+  };
+}
+
 server.tool(
   "get_package_config",
-  "Get the correct CDN URL and latest version for any npm package",
-  { packages: z.array(z.string()).describe('Array of npm package names, e.g. ["three", "gsap"]') },
-  async ({ packages }) => {
+  "Get the correct version and install info for npm, PyPI, or pub.dev packages. Specify registry as 'npm' (default), 'pypi', or 'pubdev'.",
+  {
+    packages: z.array(z.string()).describe('Array of package names, e.g. ["three", "gsap"]'),
+    registry: z.enum(["npm", "pypi", "pubdev"]).optional().describe('Package registry: "npm" (default), "pypi", or "pubdev"'),
+  },
+  async ({ packages, registry = "npm" }) => {
     const now = Date.now();
 
     const hits   = new Map();
     const misses = [];
 
     for (const pkg of packages) {
-      const entry = pkgCache.get(pkg);
+      const cacheKey = `${registry}:${pkg}`;
+      const entry = pkgCache.get(cacheKey);
       if (entry && now - entry.cachedAt < CACHE_TTL) {
         hits.set(pkg, entry);
       } else {
@@ -145,11 +210,15 @@ server.tool(
       }
     }
 
+    const fetchFn =
+      registry === "pypi"   ? fetchLiveVersionPypi :
+      registry === "pubdev" ? fetchLiveVersionPubdev :
+                              fetchLiveVersionNpm;
+
     const fetched = await Promise.allSettled(
-      misses.map((pkg) => fetchLiveVersion(pkg).then((version) => ({ pkg, version })))
+      misses.map((pkg) => fetchFn(pkg).then((version) => ({ pkg, version })))
     );
 
-    // Index fetch results by package name for O(1) lookup
     const liveMap = new Map();
     for (const result of fetched) {
       if (result.status === "fulfilled") {
@@ -157,28 +226,39 @@ server.tool(
       }
     }
 
+    const FALLBACK =
+      registry === "pypi"   ? FALLBACK_PYPI :
+      registry === "pubdev" ? FALLBACK_PUBDEV :
+                              FALLBACK_NPM;
+
     const results = packages.map((pkg) => {
-      // Cache hit
+      const cacheKey = `${registry}:${pkg}`;
+
       if (hits.has(pkg)) {
         const e = hits.get(pkg);
-        return buildResult(pkg, e.version, e.source, true, new Date(e.cachedAt).toISOString(), e.noCdn);
+        const cachedAt = new Date(e.cachedAt).toISOString();
+        if (registry === "pypi")   return buildPypiResult(pkg, e.version, e.source, true, cachedAt);
+        if (registry === "pubdev") return buildPubdevResult(pkg, e.version, e.source, true, cachedAt);
+        return buildNpmResult(pkg, e.version, e.source, true, cachedAt, e.noCdn);
       }
 
       const liveVersion = liveMap.get(pkg) ?? null;
       const fallback    = FALLBACK[pkg];
 
       if (!liveVersion && !fallback) {
-        return { package: pkg, error: "Package not found in registry or fallback list" };
+        return { package: pkg, error: "Package not found in registry or fallback list", registry };
       }
 
       const version = liveVersion ?? fallback.version;
       const source  = liveVersion ? "live" : "fallback";
-      // Respect no-cdn flag from fallback data even when version came from live fetch
       const noCdn   = fallback?.noCdn ?? false;
+      const cachedAt = new Date(now).toISOString();
 
-      pkgCache.set(pkg, { version, source, noCdn, cachedAt: now });
+      pkgCache.set(cacheKey, { version, source, noCdn, cachedAt: now });
 
-      return buildResult(pkg, version, source, false, new Date(now).toISOString(), noCdn);
+      if (registry === "pypi")   return buildPypiResult(pkg, version, source, false, cachedAt);
+      if (registry === "pubdev") return buildPubdevResult(pkg, version, source, false, cachedAt);
+      return buildNpmResult(pkg, version, source, false, cachedAt, noCdn);
     });
 
     return {
