@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const server = new McpServer({
   name: "preflight-mcp",
-  version: "1.3.0",
+  version: "1.3.1",
 });
 
 // ─── get_environment ──────────────────────────────────────────────────────────
@@ -457,6 +457,25 @@ server.tool(
       L.push(`- Performance-heavy tasks (emulator, Docker builds) will be slow — plan accordingly.`);
       L.push(``);
     }
+
+    // Preflight System
+    L.push(`## Preflight System`);
+    L.push(`- detect.ps1: ${isWin ? "powershell -ExecutionPolicy Bypass -File detect.ps1" : "not applicable"}`);
+    L.push(`- detect.sh: ${isWin ? "not applicable" : "bash detect.sh"}`);
+    L.push(`- env-config.json: ${configPath}`);
+    L.push(`- GitHub repo: malikasana/preflight`);
+    L.push(`- Re-run detect script after any environment change → commit → push`);
+    L.push(``);
+
+    // Error Recovery Rule
+    L.push(`## Error Recovery Rule`);
+    L.push(`When any tool, command, or program fails with "not found" or "not recognized":`);
+    L.push(`1. Check env-config.json installed_programs section first`);
+    L.push(`2. If missing → add detection to detect.ps1 and detect.sh in the preflight repo`);
+    L.push(`3. Re-run the detect script to update env-config.json`);
+    L.push(`4. Commit and push the fix to GitHub`);
+    L.push(`5. Never repeat the same failure twice`);
+    L.push(``);
 
     const content = L.join("\n");
     const outPath = path.join(process.cwd(), "CLAUDE.md");
