@@ -291,6 +291,15 @@ function Scan-InstalledPrograms {
         path = if ($exe) { $exe } else { "not found" }
     }
 
+    # GitHub CLI
+    $exe = probe @("C:\Program Files\GitHub CLI\gh.exe")
+    if (-not $exe) { $exe = find-exe "gh" }
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "gh version ([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $results["github_cli"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
     Write-Host " done" -ForegroundColor Green
 
     return $results

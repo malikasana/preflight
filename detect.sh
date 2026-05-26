@@ -498,6 +498,15 @@ else
     _AZ_INSTALLED=false; _AZ_VER="not installed"; _AZ_EXE="not found"
 fi
 
+_GH_EXE=$(_find_exe gh)
+if [[ -n "$_GH_EXE" ]]; then
+    _GH_INSTALLED=true
+    _ghv=$(_ver_cmd "$_GH_EXE" --version)
+    _GH_VER=$(echo "$_ghv" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "$_ghv")
+else
+    _GH_INSTALLED=false; _GH_VER="not installed"; _GH_EXE="not found"
+fi
+
 echo -e " \033[32mdone\033[0m"
 
 # ── PREFLIGHT.JSON SCAN ───────────────────────────────────────────────────────
@@ -560,6 +569,7 @@ export _TABLEPLUS_INSTALLED _TABLEPLUS_VER _TABLEPLUS_PATH
 export _AWS_INSTALLED _AWS_VER _AWS_EXE _AWS_REGION
 export _GCLOUD_INSTALLED _GCLOUD_VER _GCLOUD_EXE
 export _AZ_INSTALLED _AZ_VER _AZ_EXE
+export _GH_INSTALLED _GH_VER _GH_EXE
 export _PREFLIGHT_DISCOVERED_JSON
 
 # ─── WRITE JSON ───────────────────────────────────────────────────────────────
@@ -628,6 +638,7 @@ _ip = {
     "aws_cli":        {"installed": b("_AWS_INSTALLED"),     "version": e("_AWS_VER",     "not installed"), "path": e("_AWS_EXE",     "not found"), "configured_region": e("_AWS_REGION", "not configured")},
     "gcloud":         {"installed": b("_GCLOUD_INSTALLED"),  "version": e("_GCLOUD_VER",  "not installed"), "path": e("_GCLOUD_EXE",  "not found")},
     "azure_cli":      {"installed": b("_AZ_INSTALLED"),      "version": e("_AZ_VER",      "not installed"), "path": e("_AZ_EXE",      "not found")},
+    "github_cli":     {"installed": b("_GH_INSTALLED"),      "version": e("_GH_VER",      "not installed"), "path": e("_GH_EXE",      "not found")},
 }
 
 config = {
