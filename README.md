@@ -56,6 +56,29 @@ Re-run the detect script any time you install new tools or update runtimes. No s
 
 ---
 
+## Layer 1 — Program scanner (v1.3.0)
+
+The detect scripts now include a **Layer 1 program scanner** that automatically detects 19 common programs across 5 categories and adds an `installed_programs` section to `env-config.json`:
+
+| Category | Programs |
+|---|---|
+| Databases | Redis, PostgreSQL, MongoDB, MySQL, SQLite |
+| Web servers | Nginx, Apache |
+| Languages | Rust, Go, Ruby |
+| AI & ML | Ollama (+ models list), CUDA |
+| Dev tools | Android Studio, PyCharm, Postman, TablePlus |
+| Cloud CLIs | AWS CLI, Google Cloud CLI, Azure CLI |
+
+Detection uses a priority order: environment variables → Windows Registry (PS) / common paths (bash) → PATH. Missing programs are reported as `"not installed"` — no errors thrown.
+
+### preflight.json — register any tool automatically
+
+Any installed program can ship a `preflight.json` in its directory to self-register. The detect scripts scan all PATH directories and common install locations for these files and merge them into the `extensions` array automatically.
+
+See **[preflight-spec.md](preflight-spec.md)** for the full schema, field reference, and examples (Redis, Nginx, custom tools).
+
+---
+
 ## Step 1 — Generate the snapshot
 
 ### Windows
@@ -172,7 +195,7 @@ preflight/
 | Tool | Description |
 |------|-------------|
 | `get_environment` | Returns the full JSON contents of `~/.preflight/env-config.json` |
-| `get_package_config` | Fetches latest version and install info for **npm** (default), **PyPI**, and **pub.dev** packages from live registries with 1 hour cache and static fallback. Pass `registry: "pypi"` or `registry: "pubdev"` to query Python or Dart/Flutter packages. |
+| `get_package_config` | Fetches latest version and install info for **npm** (default), **PyPI**, and **pub.dev** packages from live registries with 1 hour cache and static fallback. Pass `registry: "pypi"` or `registry: "pubdev"` to query Python or Dart/Flutter packages. Extend built-in fallbacks via `mcp-server/user-fallback.json`. |
 | `generate_claude_md` | Generates a `CLAUDE.md` file in the current working directory with shell rules, package manager, CDN preference, versions, Flutter/Android setup, and Windows gotchas — all derived from your env-config.json |
 
 ### get_package_config registry examples

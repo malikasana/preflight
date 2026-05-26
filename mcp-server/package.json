@@ -1,7 +1,7 @@
 {
   "name": "@malikasana/preflight-mcp",
-  "version": "1.2.0",
-  "description": "MCP server that gives Claude Code accurate knowledge of your machine environment and live npm package versions",
+  "version": "1.3.0",
+  "description": "MCP server that gives Claude Code accurate knowledge of your machine environment, installed programs, and live package versions across npm, PyPI, and pub.dev",
   "type": "module",
   "bin": {
     "preflight-mcp": "index.js"

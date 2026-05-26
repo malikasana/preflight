@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const server = new McpServer({
   name: "preflight-mcp",
-  version: "1.2.0",
+  version: "1.3.0",
 });
 
 // ─── get_environment ──────────────────────────────────────────────────────────
@@ -123,6 +123,17 @@ const FALLBACK_PUBDEV = {
   "freezed":              { version: "2.5.2" },
   "json_serializable":    { version: "6.8.0" },
 };
+
+// Merge user-provided fallbacks over the built-ins (all three registries)
+const userFallbackPath = path.join(__dirname, "user-fallback.json");
+if (existsSync(userFallbackPath)) {
+  try {
+    const uf = JSON.parse(readFileSync(userFallbackPath, "utf-8"));
+    if (uf.npm    && typeof uf.npm    === "object") Object.assign(FALLBACK_NPM,    uf.npm);
+    if (uf.pypi   && typeof uf.pypi   === "object") Object.assign(FALLBACK_PYPI,   uf.pypi);
+    if (uf.pubdev && typeof uf.pubdev === "object") Object.assign(FALLBACK_PUBDEV, uf.pubdev);
+  } catch {}
+}
 
 const CACHE_TTL = 60 * 60 * 1000;
 const pkgCache  = new Map();

@@ -131,12 +131,47 @@ Re-run the detect script whenever you install new tools, update runtimes, or cha
 
 ---
 
+## Layer 1 — Program scanner (v1.3.0)
+
+The detect scripts automatically detect 19 programs and add an `installed_programs` section to `env-config.json`:
+
+| Category | Programs |
+|---|---|
+| Databases | Redis, PostgreSQL, MongoDB, MySQL, SQLite |
+| Web servers | Nginx, Apache |
+| Languages | Rust, Go, Ruby |
+| AI & ML | Ollama (+ models list), CUDA |
+| Dev tools | Android Studio, PyCharm, Postman, TablePlus |
+| Cloud CLIs | AWS CLI, Google Cloud CLI, Azure CLI |
+
+Detection priority: env vars → registry/common paths → PATH lookup. All missing programs are recorded as `"not installed"` — never throws errors.
+
+### preflight.json — self-registration
+
+Any tool can ship a `preflight.json` in its install directory. The detect scripts discover these automatically and merge them into `extensions`. See [preflight-spec.md](../preflight-spec.md) for the full schema.
+
+### User-configurable fallbacks
+
+Create `mcp-server/user-fallback.json` to add your own package fallbacks (not committed to git):
+
+```json
+{
+  "npm":    { "my-private-pkg": { "version": "2.1.0" } },
+  "pypi":   { "internal-lib":  { "version": "0.4.1" } },
+  "pubdev": { "company_pkg":   { "version": "1.0.0" } }
+}
+```
+
+Entries in `user-fallback.json` override the built-in fallback table for any registry. The file is gitignored — safe for private or internal package names.
+
+---
+
 ## Tool reference
 
 | Tool | Description |
 |------|-------------|
 | `get_environment` | Returns the full JSON contents of `~/.preflight/env-config.json` |
-| `get_package_config` | Fetches latest version and install info for **npm** (default), **PyPI**, and **pub.dev** packages from live registries with 1 hour cache and static fallback. Pass `registry: "pypi"` or `registry: "pubdev"` to query Python or Dart/Flutter packages. |
+| `get_package_config` | Fetches latest version and install info for **npm** (default), **PyPI**, and **pub.dev** packages from live registries with 1 hour cache and static fallback. Pass `registry: "pypi"` or `registry: "pubdev"` to query Python or Dart/Flutter packages. Extend built-in fallbacks via `user-fallback.json`. |
 | `generate_claude_md` | Generates a `CLAUDE.md` file in the current working directory with shell rules, package manager, CDN preference, versions, Flutter/Android setup, and Windows gotchas — all derived from your env-config.json |
 
 ---
