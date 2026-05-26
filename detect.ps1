@@ -24,6 +24,316 @@ function Get-ExeVersion {
     try { return (Get-Item $p -ErrorAction Stop).VersionInfo.FileVersion } catch { return $null }
 }
 
+# ─── PROGRAM SCANNER ──────────────────────────────────────────────────────────
+
+function Scan-InstalledPrograms {
+    $results = [ordered]@{}
+
+    function try-ver {
+        param([string]$exe, [string[]]$a)
+        try { $o = & $exe @a 2>&1 | Select-Object -First 1; if ($o) { "$o".Trim() } else { $null } } catch { $null }
+    }
+    function find-exe {
+        param([string]$name)
+        try { (Get-Command $name -ErrorAction Stop).Source } catch { $null }
+    }
+    function probe {
+        param([string[]]$paths)
+        foreach ($p in $paths) { if ($p -and (Test-Path $p -ErrorAction SilentlyContinue)) { return $p } }
+        return $null
+    }
+
+    # ── DATABASES ────────────────────────────────────────────────────────────
+    Write-Host "    databases..." -NoNewline
+
+    # Redis
+    $exe = find-exe "redis-server"
+    if (-not $exe) { $exe = probe @("C:\Program Files\Redis\redis-server.exe","C:\Redis\redis-server.exe") }
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "v=([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $cfg = probe @("C:\Program Files\Redis\redis.windows.conf","C:\Redis\redis.windows.conf")
+    $results["redis"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 6379
+        config_file = if ($cfg) { $cfg } else { "not found" }
+    }
+
+    # PostgreSQL
+    $exe = find-exe "psql"
+    if (-not $exe) {
+        $pgDir = Get-ChildItem "C:\Program Files\PostgreSQL" -Directory -ErrorAction SilentlyContinue |
+                 Sort-Object Name -Descending | Select-Object -First 1
+        if ($pgDir) { $exe = probe @((Join-Path $pgDir.FullName "bin\psql.exe")) }
+    }
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "([\d.]+)$") { $Matches[1] } else { $v } } else { $null }
+    $results["postgresql"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 5432
+        data_dir = if ($env:PGDATA) { $env:PGDATA } else { "not configured" }
+    }
+
+    # MongoDB
+    $exe = find-exe "mongod"
+    if (-not $exe) {
+        $mgDir = Get-ChildItem "C:\Program Files\MongoDB\Server" -Directory -ErrorAction SilentlyContinue |
+                 Sort-Object Name -Descending | Select-Object -First 1
+        if ($mgDir) { $exe = probe @((Join-Path $mgDir.FullName "bin\mongod.exe")) }
+    }
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $dataDir = probe @("C:\data\db","C:\MongoDB\data")
+    $results["mongodb"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 27017
+        data_dir = if ($dataDir) { $dataDir } else { "not found" }
+    }
+
+    # MySQL
+    $exe = find-exe "mysql"
+    if (-not $exe) { $exe = probe @("C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe","C:\Program Files\MySQL\MySQL Server 5.7\bin\mysql.exe") }
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $cfg = probe @("C:\ProgramData\MySQL\MySQL Server 8.0\my.ini","C:\ProgramData\MySQL\MySQL Server 5.7\my.ini","C:\Windows\my.ini")
+    $results["mysql"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 3306
+        config_file = if ($cfg) { $cfg } else { "not found" }
+    }
+
+    # SQLite
+    $exe = find-exe "sqlite3"
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v) { ($v -split '\s+')[0] } else { $null } } else { $null }
+    $results["sqlite"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
+    Write-Host " done" -ForegroundColor Green
+
+    # ── WEB SERVERS ──────────────────────────────────────────────────────────
+    Write-Host "    web servers..." -NoNewline
+
+    # Nginx
+    $exe = find-exe "nginx"
+    if (-not $exe) { $exe = probe @("C:\nginx\nginx.exe","C:\Program Files\nginx\nginx.exe") }
+    $ver = if ($exe) { $v = try-ver $exe @("-v"); if ($v -match "nginx/([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $cfgPath = if ($exe) { Join-Path (Split-Path $exe) "conf\nginx.conf" } else { $null }
+    $results["nginx"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 80
+        config_file = if ($cfgPath -and (Test-Path $cfgPath -ErrorAction SilentlyContinue)) { $cfgPath } else { "not found" }
+    }
+
+    # Apache
+    $exe = find-exe "httpd"
+    if (-not $exe) { $exe = probe @("C:\Apache24\bin\httpd.exe","C:\Program Files\Apache Group\Apache2\bin\httpd.exe") }
+    $ver = if ($exe) { $v = try-ver $exe @("-v"); if ($v -match "([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $cfgPath = if ($exe) { Join-Path (Split-Path (Split-Path $exe)) "conf\httpd.conf" } else { $null }
+    $results["apache"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 80
+        config_file = if ($cfgPath -and (Test-Path $cfgPath -ErrorAction SilentlyContinue)) { $cfgPath } else { "not found" }
+    }
+
+    Write-Host " done" -ForegroundColor Green
+
+    # ── LANGUAGES ────────────────────────────────────────────────────────────
+    Write-Host "    languages..." -NoNewline
+
+    # Rust
+    $exe = find-exe "rustc"
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "rustc\s+([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $cargo = find-exe "cargo"
+    $results["rust"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        rustc_path = if ($exe) { $exe } else { "not found" }
+        cargo_path = if ($cargo) { $cargo } else { "not found" }
+    }
+
+    # Go
+    $exe = find-exe "go"
+    $ver = if ($exe) { $v = try-ver $exe @("version"); if ($v -match "go([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $gopath = if ($env:GOPATH) { $env:GOPATH } elseif ($exe) { Join-Path $env:USERPROFILE "go" } else { $null }
+    $results["go"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+        GOPATH = if ($gopath) { $gopath } else { "not configured" }
+    }
+
+    # Ruby
+    $exe = find-exe "ruby"
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "ruby\s+([\d.p]+)") { $Matches[1] } else { $v } } else { $null }
+    $results["ruby"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
+    Write-Host " done" -ForegroundColor Green
+
+    # ── AI & ML ──────────────────────────────────────────────────────────────
+    Write-Host "    ai_ml..." -NoNewline
+
+    # Ollama
+    $exe = find-exe "ollama"
+    if (-not $exe) { $exe = probe @((Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe")) }
+    $ver = if ($exe) { try-ver $exe @("--version") } else { $null }
+    $models = @()
+    if ($exe) {
+        try {
+            $job = Start-Job { & $using:exe list 2>&1 | Select-Object -Skip 1 }
+            $ml  = $job | Wait-Job -Timeout 5 | Receive-Job
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            $models = @($ml | Where-Object { $_ -match '\S' } | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ })
+        } catch {}
+    }
+    $results["ollama"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }; port = 11434; models = $models
+    }
+
+    # CUDA
+    $exe = find-exe "nvcc"
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "release\s+([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $gpu = safe { (Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1).Name }
+    $results["cuda"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        nvcc_path = if ($exe) { $exe } else { "not found" }
+        gpu = if ($gpu) { $gpu } else { "no NVIDIA GPU detected" }
+    }
+
+    Write-Host " done" -ForegroundColor Green
+
+    # ── DEV TOOLS ────────────────────────────────────────────────────────────
+    Write-Host "    dev_tools..." -NoNewline
+
+    # Android Studio
+    $studioPath = probe @("D:\Android Studio\bin\studio64.exe","C:\Program Files\Android\Android Studio\bin\studio64.exe")
+    $studioVer  = if ($studioPath) { Get-ExeVersion $studioPath } else { $null }
+    $sdkRoot    = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { "D:\Sdk" }
+    $sdkMgr     = probe @((Join-Path $sdkRoot "cmdline-tools\latest\bin\sdkmanager.bat"),(Join-Path $sdkRoot "tools\bin\sdkmanager.bat"))
+    $results["android_studio"] = [ordered]@{
+        installed = ($null -ne $studioPath)
+        version = if ($studioVer) { $studioVer } else { "not installed" }
+        path = if ($studioPath) { $studioPath } else { "not found" }
+        sdkmanager_path = if ($sdkMgr) { $sdkMgr } else { "not found" }
+    }
+
+    # PyCharm
+    $pcPath = $null
+    $pcDir = Get-ChildItem "C:\Program Files\JetBrains" -Directory -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -like "PyCharm*" } | Sort-Object Name -Descending | Select-Object -First 1
+    if ($pcDir) { $pcPath = probe @((Join-Path $pcDir.FullName "bin\pycharm64.exe")) }
+    if (-not $pcPath) {
+        $pcReg = Get-ChildItem "HKLM:\SOFTWARE\JetBrains" -ErrorAction SilentlyContinue |
+                 Where-Object { $_.PSChildName -like "PyCharm*" } | Select-Object -First 1
+        if ($pcReg) {
+            $loc = (Get-ItemProperty $pcReg.PSPath -ErrorAction SilentlyContinue).InstallLocation
+            if ($loc) { $pcPath = probe @((Join-Path $loc "bin\pycharm64.exe")) }
+        }
+    }
+    $pcVer    = if ($pcPath) { Get-ExeVersion $pcPath } else { $null }
+    $pcInterp = safe { & python -c "import sys; print(sys.executable)" 2>$null }
+    $results["pycharm"] = [ordered]@{
+        installed = ($null -ne $pcVer)
+        version = if ($pcVer) { $pcVer } else { "not installed" }
+        path = if ($pcPath) { $pcPath } else { "not found" }
+        default_interpreter = if ($pcInterp) { $pcInterp } else { "not detected" }
+    }
+
+    # Postman
+    $exe = probe @(
+        (Join-Path $env:LOCALAPPDATA "Postman\Postman.exe"),
+        (Join-Path $env:APPDATA     "Postman\Postman.exe"),
+        "C:\Program Files\Postman\Postman.exe"
+    )
+    $ver = if ($exe) { Get-ExeVersion $exe } else { $null }
+    $results["postman"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
+    # TablePlus
+    $exe = probe @(
+        (Join-Path $env:LOCALAPPDATA "TablePlus\TablePlus.exe"),
+        "C:\Program Files\TablePlus\TablePlus.exe"
+    )
+    $ver = if ($exe) { Get-ExeVersion $exe } else { $null }
+    $results["tableplus"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
+    Write-Host " done" -ForegroundColor Green
+
+    # ── CLOUD TOOLS ──────────────────────────────────────────────────────────
+    Write-Host "    cloud..." -NoNewline
+
+    # AWS CLI
+    $exe = find-exe "aws"
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "aws-cli/([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $region = if ($exe) { safe { & $exe configure get region 2>&1 } } else { $null }
+    $results["aws_cli"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+        configured_region = if ($region) { $region } else { "not configured" }
+    }
+
+    # Google Cloud CLI
+    $exe = find-exe "gcloud"
+    $ver = if ($exe) { $v = try-ver $exe @("version"); if ($v -match "Google Cloud SDK ([\d.]+)") { $Matches[1] } else { $v } } else { $null }
+    $results["gcloud"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
+    # Azure CLI
+    $exe = find-exe "az"
+    $ver = if ($exe) { $v = try-ver $exe @("--version"); if ($v -match "azure-cli\s+([\d.]+)") { $Matches[1] } else { ($v -split '\s+')[0] } } else { $null }
+    $results["azure_cli"] = [ordered]@{
+        installed = ($null -ne $exe); version = if ($ver) { $ver } else { "not installed" }
+        path = if ($exe) { $exe } else { "not found" }
+    }
+
+    Write-Host " done" -ForegroundColor Green
+
+    return $results
+}
+
+function Scan-PreflightJson {
+    $discovered = @()
+    $seen       = @{}
+
+    $searchDirs = @($env:PATH -split ";" | Where-Object { $_.Trim() -ne "" } | Select-Object -Unique)
+    $roots = @(
+        "C:\Program Files", "C:\Program Files (x86)",
+        (Join-Path $env:LOCALAPPDATA "Programs"),
+        $env:APPDATA, "D:\"
+    )
+    foreach ($root in $roots) {
+        if (Test-Path $root -ErrorAction SilentlyContinue) {
+            $searchDirs += @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
+                            Select-Object -ExpandProperty FullName)
+        }
+    }
+
+    foreach ($dir in ($searchDirs | Select-Object -Unique)) {
+        $pf = Join-Path $dir "preflight.json"
+        if ((Test-Path $pf -ErrorAction SilentlyContinue) -and -not $seen[$pf]) {
+            $seen[$pf] = $true
+            try {
+                $data = Get-Content $pf -Raw -ErrorAction Stop | ConvertFrom-Json
+                if ($data.name) {
+                    $discovered += [ordered]@{
+                        name        = "$($data.name)"
+                        version     = if ($data.version)     { "$($data.version)" }     else { "unknown" }
+                        added_at    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
+                        description = if ($data.description) { "$($data.description)" } else { "registered via preflight.json at $pf" }
+                        source      = $pf
+                    }
+                }
+            } catch {}
+        }
+    }
+    return $discovered
+}
+
 # ─── SYSTEM ───────────────────────────────────────────────────────────────────
 
 Write-Host "  system..." -NoNewline
@@ -424,12 +734,45 @@ foreach ($entry in $cdnTargets.GetEnumerator()) {
 
 Write-Host " done" -ForegroundColor Green
 
+# ─── INSTALLED PROGRAMS ───────────────────────────────────────────────────────
+
+Write-Host "  installed_programs..." -ForegroundColor Cyan
+$installedPrograms = Scan-InstalledPrograms
+
+Write-Host "  preflight.json scan..." -NoNewline
+$preflightDiscovered = Scan-PreflightJson
+Write-Host " done ($($preflightDiscovered.Count) found)" -ForegroundColor Green
+
+# Preserve manually-added extensions from previous run; merge with preflight.json discoveries
+$existingExtensions = @()
+if (Test-Path $outputPath -ErrorAction SilentlyContinue) {
+    try {
+        $prev = Get-Content $outputPath -Raw | ConvertFrom-Json
+        if ($prev.extensions) {
+            $existingExtensions = @($prev.extensions | ForEach-Object {
+                [ordered]@{
+                    name        = "$($_.name)"
+                    version     = "$($_.version)"
+                    added_at    = "$($_.added_at)"
+                    description = "$($_.description)"
+                }
+            })
+        }
+    } catch {}
+}
+$mergedExtensions = @($preflightDiscovered)
+foreach ($ext in $existingExtensions) {
+    if (-not ($mergedExtensions | Where-Object { $_.name -eq $ext.name })) {
+        $mergedExtensions += $ext
+    }
+}
+
 # ─── ASSEMBLE ─────────────────────────────────────────────────────────────────
 
 Write-Host "  writing JSON..." -NoNewline
 
 $config = [ordered]@{
-    config_version = "1.1"
+    config_version = "1.3"
     generated_at   = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
 
     system = [ordered]@{
@@ -490,13 +833,15 @@ $config = [ordered]@{
         cdn_latency_ms = $cdnLatency
     }
 
+    installed_programs = $installedPrograms
+
     extensions_schema = [ordered]@{
         name        = "string - tool or package name"
         version     = "string - semver or tag"
         added_at    = "string - ISO 8601 timestamp"
         description = "string - what this extension does"
     }
-    extensions = @()
+    extensions = @($mergedExtensions)
 }
 
 try {
